@@ -1,9 +1,10 @@
 import pygame
 import numpy as np
 from copy import deepcopy
+from random import randint
 
 FPS = 60
-
+pygame.init()
 
 class Particle(object):
     def __init__(self, velocity=np.array([100., 80.]), pos=np.array([0., 0.]), radius=10, color=(0, 0, 0)):
@@ -39,7 +40,8 @@ class Game(object):
         self.atoms = []
         self.photons = []
         self.surface = pygame.display.set_mode((800,600))
-        
+        self.myfont = pygame.font.SysFont("monospace", 15)
+
     def tick(self):
         for particle in self.atoms + self.photons:
             particle.pos += particle.velocity/float(FPS)
@@ -66,14 +68,40 @@ class Game(object):
                         
         pygame.draw.rect(self.surface, (0, 0, 0), (0,0,800,600))
         for particle in self.atoms + self.photons:
-            pygame.draw.circle(self.surface, particle.color, particle.pos.astype(np.int64), particle.radius)
+            try:
+                pygame.draw.circle(self.surface, particle.color, particle.pos.astype(np.int64), particle.radius)
+            except TypeError:
+                print particle.color
+                raise
+
+        label = self.myfont.render("Number of Photons: " + str(len(self.photons)), 1, (255,255,255))
+        self.surface.blit(label, (543, 543))
 
             
 clock = pygame.time.Clock()
 game = Game()
-game.atoms = [Atom(pos=np.array((800.,600.)), velocity=np.array((-350.,0.)))]
-game.photons = [Photon(velocity=np.array((240.,0)))]
+#game.atoms.append(Atom(pos=np.array((800.,600.)), velocity=np.array((-350.,0.))))
+#game.photons.append(Photon(velocity=np.array((240.,0))))
 
+for _ in xrange(40):
+    energy = randint(0, 7)
+    pos = np.array([randint(0,799), randint(0,599)]).astype(np.float64)
+    velocity = np.array([randint(-120,120), randint(-120,120)]).astype(np.float64)
+    game.atoms.append(Atom(energy=energy, velocity=velocity, pos=pos))
+
+for _ in xrange(30):
+    energy = (randint(0, 7), randint(0, 7))
+    if energy[0] == energy[1]:
+        energy = (4,3)
+    pos = np.array([randint(0,799), randint(0,599)]).astype(np.float64)
+    velocity = np.array([randint(-180,180), randint(-180,180)]).astype(np.float64)
+    velocity = np.random.normal(size=(2,))
+    if np.linalg.norm(velocity) == 0.:
+        velocity = np.array([1,0])
+    else:
+        velocity /= np.linalg.norm(velocity)
+    velocity *= 180.
+    game.photons.append(Photon(energy=(4,6), velocity=velocity, pos=pos))
 
 while True:
     game.tick()
