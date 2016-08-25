@@ -7,10 +7,13 @@ from data import WALLS, FLOORS, KEYBOARD1, FPS
 pygame.init()
 
 
-_perspective = Perspective(
+_perspective1 = Perspective(
     camera_position=np.array([0.,20.,50.]), camera_matrix=np.array([[0.,0.,-12.],[8.,0.,0.,],[0.,6.,0.,]]),
     screen_x=0, screen_y=0, screen_width=800, screen_height=600)
-_scene = Scene3D(id_=0, views=[_perspective])
+_perspective2 = Perspective(
+    camera_position=np.array([0.,-20.,10.]), camera_matrix=np.array([[0.,0.,-12.],[8.,0.,0.,],[0.,6.,0.,]]),
+    screen_x=0, screen_y=0, screen_width=800, screen_height=600)
+_scene = Scene3D(id_=0, views=[_perspective1, _perspective2])
 for floor in FLOORS:
     _scene.add_item(floor)
 for wall in WALLS:

@@ -5,10 +5,12 @@ from classes import *
 WALLS = [
     StraightWall([], np.array([-50., 30., -200]), np.array([-50., 10., -350])),
     StraightWall([], np.array([-20., 10., -10.]), np.array([10., -5., -20.])),
+    StraightWall([], np.array([-100., -50., -50.]), np.array([-90., 50., -20.]))
 ]
 
 FLOORS = [
-    Floor([], np.array([-20., -5., -10.]), np.array([10., -5., -20.]), (0,0,128)),
+    Floor([], np.array([-10., 0., -200.]), np.array([10., 0., -100.]), (255,255,0)),
+#    Floor([], np.array([-20., -5., -10.]), np.array([10., -5., -20.]), (0,0,128)),
 ]
 
 _theta = 0.1
@@ -26,6 +28,8 @@ KEYBOARD1 = {
     pygame.K_KP8: lambda game: game.camera_rotate_x(-_theta),
     pygame.K_KP7: lambda game: game.camera_rotate_z(_theta),
     pygame.K_KP9: lambda game: game.camera_rotate_z(-_theta),
+    pygame.K_1: lambda game: game.set_active_view(0),
+    pygame.K_2: lambda game: game.set_active_view(1),
 }
 
 FPS = 60

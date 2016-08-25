@@ -111,6 +111,13 @@ class Scene(object):
         self.player_ = item
         self.add_item(item)
 
+    def set_active_view(self, index):
+        try:
+            self.active_view_ = self.views_[index]
+        except (IndexError, TypeError):
+            pass
+
+        
 class Scene2D(Scene):
 # menu, chessboard etc.
     def __init__(self, ):
@@ -369,7 +376,8 @@ class Game(object):
         floor_plane = (0., 1., 0., 0.,)
         player_speed = 12.
         player.path_ = self.active_world.active_scene_.find_path(player.position_, self.active_world.active_scene_.active_view_.describe(click_position, floor_plane), speed=player_speed, fps=fps)
-
+    def set_active_view(self, index):
+        self.displayer.world.active_scene_.set_active_view(index)
 
 
 
