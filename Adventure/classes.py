@@ -221,8 +221,60 @@ class Camera3D(object):
     def move_up(self, dist):
         self.position_ += dist * self.e3_ / np.sqrt(self.E3_)
 
+class Camera3DStereo(object):
+    def __init__(self, camera1, camera2):
+        self.c1 = camera1
+        self.c2 = camera2
 
+    def rotate_x(self, theta):
+        self.c1.rotate_x(theta)
+        self.c2.rotate_x(theta)
 
+    def rotate_y(self, theta):
+        self.c1.rotate_y(theta)
+        self.c2.rotate_y(theta)
+
+    def rotate_z(self, theta):
+        self.c1.rotate_z(theta)
+        self.c2.rotate_z(theta)
+
+    def move_forward(self, dist):
+        self.c1.move_forward(dist)
+        self.c2.move_forward(dist)
+
+    def move_right(self, dist):
+        self.c1.move_right(dist)
+        self.c2.move_right(dist)
+
+    def move_up(self, dist):
+        self.c1.move_up(dist)
+        self.c2.move_up(dist)
+
+class PerspectiveStereo(SceneView3D):
+
+    def __init__(self, camera_position, camera_matrix,
+                 screen_x, screen_y, screen_width, screen_height):
+        self.screen_x = screen_x
+        self.screen_y = screen_y
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+
+        self._delta_camera = np.array([3.,0.,0.])
+        self.p1 = Perspective(camera_position, camera_matrix,
+                              screen_x, screen_y, screen_width, screen_height)
+        self.p2 = Perspective(camera_position - self._delta_camera, camera_matrix,
+                              screen_x + screen_width, screen_y, screen_width, screen_height)
+        self.camera = Camera3DStereo(self.p1.camera, self.p2.camera)
+
+    def draw_scene(self, surface, scene):
+        self.p1.draw_scene(surface, scene)
+        self.p2.draw_scene(surface, scene)
+
+    def describe(self, xy, plane):
+        if xy[0] >= self.screen_x + self.screen_width:
+            return self.p2.describe(xy, plane)
+        else:
+            return self.p1.describe(xy, plane)
 
 class Perspective(SceneView3D):
 
