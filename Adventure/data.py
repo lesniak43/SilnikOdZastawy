@@ -1,6 +1,6 @@
 import pygame
 
-from classes import *
+from zastawa.engine import *
 
 WALLS = [
     StraightWall([], np.array([-50., 30., -200]), np.array([-50., 10., -350])),
