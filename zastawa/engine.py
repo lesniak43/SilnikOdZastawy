@@ -191,18 +191,53 @@ class Scene3D(Scene):
     def check_collision(self, item, new_position):
         return False
 
+MOVING = 0
+STANDING = 1
+
 
 class HexItem(Item):
 
-    def __init__(self, uid, hex_position=np.array((0,0,0)), speed=1, color=(0,0,0)):
+    def __init__(self, uid, hex_position=np.array((0,0,0)), color=(0,0,0), steps_per_move=60):
         self.uid = uid
+        """
         self.hex_position = hex_position
         self.true_hex_position = (hex_position, hex_position)
         self.path = []
         self.hex_path = []
-        self.speed = speed
+        """
         self.color = color
         self.timeout = 0
+
+        # MOVEMENT
+        self.hex_position = hex_position
+        self.hex_target = hex_position
+        self.prev_hex_position = hex_position
+        self.steps_per_move = steps_per_move
+        self.step = 0
+
+        # STATE
+        self.state = STANDING
+        self.updated_pos = False
+
+    def move(self, hex_position):
+        self.hex_position = hex_position
+        self.step = self.steps_per_move
+        self.state = MOVING
+
+    def one_step(self):
+        if self.step > 0:
+            self.step -= 1
+            if self.step == 0:
+                self.prev_hex_position = self.hex_position
+                self.state = STANDING
+            self.updated_pos = True
+
+    def get_continuous_position(self):
+        self.updated_pos = False
+        return (self.step * self.prev_hex_position + (self.steps_per_move - self.step )* self.hex_position).astype(np.float16) / float(self.steps_per_move)
+
+    def tick(self):
+        self.one_step()
 
 class SceneHex(Scene):
 
@@ -211,8 +246,10 @@ class SceneHex(Scene):
         self.e1 = np.array((0, 1, -1))
         self.e2 = np.array((-1, 1, 0))
         self.e3 = np.array((-1, 0, 1))
+
         self.items = []
-        
+        self.item_paths = []
+        self.active_items_indices = range(20)
 
         # example code
         # self._mode = 0
@@ -222,54 +259,108 @@ class SceneHex(Scene):
 
         self._occupied = {}
 
-    def occupy_true_hex_position(self, item, true_hex_position):
-        self._occupied[item.uid] = tuple(true_hex_position[1])
+        self.obstacles = set()
+        for _ in xrange(100):
+            self.obstacles.add(tuple(np.random.randint(-10, 10) * self.e1 + np.random.randint(-10, 10) * self.e2 + np.random.randint(-10, 10) * self.e3))
 
-    def can_move(self, item, true_hex_position):
+    def add_item(self, item):
+        self.items.append(item)
+        self.item_paths.append([])
+
+    def add_obstacle(self, pos):
+        if tuple(pos) in self.obstacles:
+            self.obstacles.remove(tuple(pos))
+        else:
+            self.obstacles.add(tuple(pos))
+
+    def occupy_true_hex_position(self, item, true_hex_position):
+        self._occupied[item.uid] = tuple(true_hex_position)
+
+    def can_move(self, item, next_hex):
+
+        if tuple(next_hex) in self.obstacles:
+            return False
+#        if np.sum(np.abs(next_hex)) < 7:
+#            return False
         if item.uid not in self._occupied:
             return True
-        elif self._occupied[item.uid] == tuple(true_hex_position[1]):
+        elif self._occupied[item.uid] == tuple(next_hex):
             return True
-        elif self._occupied.values().count(tuple(true_hex_position[1])) < self.MAX_PER_HEX:
+        elif self._occupied.values().count(tuple(next_hex)) < self.MAX_PER_HEX:
             return True
         else:
             return False
 
-    def find_path(self, start_hex, end_hex, speed=1, fps=60):
-        delta = end_hex - start_hex
-        path = [start_hex]
-        hex_path = [(start_hex, start_hex)]
+    def find_hex_path(self, start_hex, end_hex):
+        hex_path = [start_hex]
         for step in [self.e1, self.e2, self.e3, -self.e1, -self.e2, -self.e3]:
-            while np.sum(np.abs(end_hex - (path[-1] + step))) < np.sum(np.abs(end_hex - path[-1])):
-                hex_path += (fps / speed) * [(path[-1].astype(np.int64), (path[-1] + step).astype(np.int64))]
-                if self._mode == 0:
-                    path += (fps / speed) * [path[-1] + step]
-                elif self._mode == 1:
-                    path += list(np.vstack([np.linspace(np.array(path[-1])[i], (path[-1] + step)[i], (fps / speed)) for i in xrange(3)]).T)
-                else:
-                    raise ValueError()
-        return list(reversed(path)), list(reversed(hex_path))
+            while np.sum(np.abs(end_hex - (hex_path[-1] + step))) < np.sum(np.abs(end_hex - hex_path[-1])):
+                hex_path.append((hex_path[-1] + step).astype(np.int64))
+        return list(reversed(hex_path))
+
+    def get_possible_steps(self, hex_position):
+        """
+        if np.sum(np.abs(hex_position)) < 15:
+            if np.argmax(hex_position) == 0:
+                return [-self.e3, self.e1, self.e2]
+            elif np.argmax(hex_position) == 1:
+                return [self.e2, self.e3, -self.e1]
+            elif np.argmax(hex_position) == 2:
+                return [-self.e1, -self.e2, -self.e3]
+            else:
+                return [self.e1, self.e2, self.e3, -self.e1, -self.e2, -self.e3]
+        else:
+            return [self.e1, self.e2, self.e3, -self.e1, -self.e2, -self.e3]
+        """
+        return [self.e1, self.e2, self.e3, -self.e1, -self.e2, -self.e3]
+
+    def find_next_hex(self, item):
+        start_hex = item.hex_position
+        end_hex = item.hex_target
+        steps = self.get_possible_steps(item.hex_position)
+        for step in steps:
+            if np.sum(np.abs(end_hex - (start_hex + step))) < np.sum(np.abs(end_hex - start_hex)):
+                if self.can_move(item, start_hex + step):
+                    return start_hex + step
+        for step in steps:
+            if np.sum(np.abs(end_hex - (start_hex + step))) <= np.sum(np.abs(end_hex - start_hex)):
+                if self.can_move(item, start_hex + step):
+                    return start_hex + step
+#        np.random.shuffle(steps)
+#        for step in steps:
+#            if self.can_move(item, start_hex + step):
+#                return start_hex + step
+        return start_hex
 
     def tick(self):
-        for item in self.items:
-            if len(item.path) > 0:
-                if self.can_move(item, item.hex_path[-1]):
-                    item.hex_position = item.path.pop()
-                    item.true_hex_position = item.hex_path.pop()
-                    self.occupy_true_hex_position(item, item.true_hex_position)
-                    item.timeout = 0
+        for i, item in enumerate(self.items):
+            if item.state == MOVING:
+                pass
+            elif item.state == STANDING:
+                if (item.hex_target != item.hex_position).any():
+                    next_hex = self.find_next_hex(item)
+                    if self.can_move(item, next_hex):
+                        item.move(next_hex)
+                        self.occupy_true_hex_position(item, item.hex_position)
+                        item.timeout = 0
+                    else:
+                        item.timeout += 1
+                    if item.timeout >= self.TIMEOUT:
+                        item.hex_target = item.hex_position
                 else:
-                    item.timeout += 1
-                if item.timeout >= self.TIMEOUT:
-                    item.path = []
-                    item.hex_path = []
-            else:
-                pos = np.random.randint(-10, 10) * self.e1 + np.random.randint(-10, 10) * self.e2 + np.random.randint(-10, 10) * self.e3
-                #x = np.random.randint(-10, 10)
-                #y = np.random.randint(-10, 10)
-                #z = - (x + y)
-                #pos = np.array((x, y, z))
-                item.path, item.hex_path = self.find_path(item.hex_position, pos, speed=item.speed)
+                    pass
+#                    pos = np.random.randint(-10, 10) * self.e1 + np.random.randint(-10, 10) * self.e2 + np.random.randint(-10, 10) * self.e3
+#                    item.hex_target = pos
+            item.tick()
+
+    def set_targets(self, pos=None):
+        if pos is None:
+            pos = np.random.randint(-10, 10) * self.e1 + np.random.randint(-10, 10) * self.e2 + np.random.randint(-10, 10) * self.e3
+        for item in [self.items[i] for i in self.active_items_indices]:
+            item.hex_target = pos
+
+
+
 
     def get_items(self):
         return self.items
@@ -299,24 +390,42 @@ class HexView(SceneView3D):
         self.e2 = np.array((-1, 1, 0))
         self.e3 = np.array((-1, 0, 1))
         self.scale = 15
+#        self.scale = 1
         self.offset = np.array((400, 300))
+#        self.offset = np.array((0, 0))
 
     def project(self, coords):
-        return (np.dot(self.projection, coords) * self.scale + self.offset).astype(np.int64)
+        return (np.dot(self.projection, np.array(coords).reshape(-1,1)).ravel() * self.scale + self.offset).astype(np.int64)
+
+    def describe(self, coords):
+        return np.dot(self.immersion, np.array((coords - self.offset) / float(self.scale)).reshape(-1,1)).ravel()
 
     def draw_scene(self, surface):
         surface.fill((255, 255, 255))
         for item in self.scene.get_items():
-            pygame.draw.circle(surface, item.color, self.project(item.hex_position), 5)
-
-    def describe(self, coords):
-        return np.dot(self.immersion, np.array(coords).reshape(-1,1))
+            middle = self.project(item.get_continuous_position())
+            pygame.draw.circle(surface, item.color, middle, 5)
+        for obs in self.scene.obstacles:
+            pygame.draw.circle(surface, (0,0,0), self.project(obs), 10)
+#        pygame.draw.circle(surface, item.color, self.project(item.hex_target), 15)
 
     def describe_hex(self, coords, L=0):
-        x, y, z = coords
-        point = np.array((int(math.floor(x)), int(math.floor(y)), L - int(math.floor(x)) - int(math.floor(y))))
-        candidates = [point, point + self.e1, point - self.e1, point + self.e2, point - self.e2, point + self.e3, point - self.e3]
+        coords = self.describe(coords)
+        point = np.round(coords).astype(np.int64)
+        candidates = [
+            np.array([point[0], point[1], L-point[0]-point[1]]),
+            np.array([point[0], L-point[0]-point[2], point[2]]),
+            np.array([L-point[1]-point[2], point[1], point[2]]),
+        ]
         return candidates[np.argmin([np.linalg.norm(c - np.array(coords)) for c in candidates])] 
+
+    def items_in_rect(self, pos1, pos2):
+        rect = pygame.Rect(min(pos1[0], pos2[0]), min(pos1[1], pos2[1]), abs(pos1[0] - pos2[0]), abs(pos1[1] - pos2[1]))
+        result = []
+        for i, item in enumerate(self.scene.get_items()):
+            if rect.collidepoint(self.project(item.hex_position)):
+                result.append(i)
+        return result
 
 
 
